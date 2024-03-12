@@ -387,12 +387,8 @@ pub enum SigFlag {
 }
 
 impl SigFlag {
-    fn is_default(&self) -> bool {
-        if self.eq(&SigFlag::SigInputs) {
-            true
-        } else {
-            false
-        }
+    pub fn is_default(&self) -> bool {
+        self.eq(&SigFlag::SigInputs)
     }
 }
 
