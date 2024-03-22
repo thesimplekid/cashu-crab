@@ -84,8 +84,6 @@ impl Proof {
             return Ok(());
         }
 
-        println!("{:?}", spending_conditions.refund_keys);
-
         if let Some(locktime) = spending_conditions.locktime {
             // If lock time has passed check if refund witness signature is valid
             if locktime.lt(&unix_time()) && !spending_conditions.refund_keys.is_empty() {
@@ -172,6 +170,7 @@ pub struct P2PKConditions {
     pub refund_keys: Vec<VerifyingKey>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub num_sigs: Option<u64>,
+    #[serde(skip_serializing_if = "SigFlag::is_default")]
     pub sig_flag: SigFlag,
 }
 
@@ -215,7 +214,7 @@ impl TryFrom<P2PKConditions> for Secret {
             return Err(Error::Amount);
         }
 
-        let data: PublicKey = pubkeys[0].clone().into();
+        let data = pubkeys[0].clone();
 
         let data = data.to_string();
 
@@ -237,7 +236,11 @@ impl TryFrom<P2PKConditions> for Secret {
             tags.push(Tag::Refund(refund_keys).as_vec())
         }
 
-        tags.push(Tag::SigFlag(sig_flag).as_vec());
+        if !sig_flag.is_default() {
+            tags.push(Tag::SigFlag(sig_flag).as_vec());
+        }
+
+        let tags = if !tags.is_empty() { Some(tags) } else { None };
 
         Ok(Secret {
             kind: super::nut10::Kind::P2PK,
@@ -266,6 +269,7 @@ impl TryFrom<Secret> for P2PKConditions {
             .clone()
             .secret_data
             .tags
+            .unwrap_or_default()
             .into_iter()
             .map(|t| Tag::try_from(t).unwrap())
             .map(|t| (t.kind(), t))
@@ -382,6 +386,12 @@ pub enum SigFlag {
     Custom(String),
 }
 
+impl SigFlag {
+    pub fn is_default(&self) -> bool {
+        self.eq(&SigFlag::SigInputs)
+    }
+}
+
 impl fmt::Display for SigFlag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -480,7 +490,6 @@ impl From<Tag> for Vec<String> {
                 let mut tag = vec![TagKind::Pubkeys.to_string()];
 
                 for pubkey in pubkeys {
-                    let pubkey: PublicKey = pubkey.into();
                     tag.push(pubkey.to_string())
                 }
                 tag
@@ -743,7 +752,7 @@ mod tests {
 
         let mut proof = Proof {
             keyset_id: Id::from_str("009a1f293253e41e").unwrap(),
-            amount: Amount::ZERO,
+            amount: Amount::from(1),
             secret: secret.clone().try_into().unwrap(),
             c: PublicKey::from_str(
                 "02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904",
@@ -754,20 +763,31 @@ mod tests {
 
         proof.sign_p2pk(secret_key).unwrap();
 
+        println!("{}", serde_json::to_string(&proof).unwrap());
+
+        proof.verify_p2pk().unwrap();
         assert!(proof.verify_p2pk().is_ok());
     }
 
     #[test]
     fn test_verify() {
+        let secret_key = SigningKey::from_str(
+            "0000000000000000000000000000000000000000000000000000000000000001",
+        )
+        .unwrap();
+        println!("{}", secret_key.public_key().to_string());
         // Proof with a valid signature
-        let valid_proof = r#"{"amount":1,"secret":"[\"P2PK\",{\"nonce\":\"859d4935c4907062a6297cf4e663e2835d90d97ecdd510745d32f6816323a41f\",\"data\":\"0249098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\",\"tags\":[[\"sigflag\",\"SIG_INPUTS\"]]}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","id":"009a1f293253e41e","witness":"{\"signatures\":[\"60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383\"]}"}"#;
+        let valid_proof = r#"{"amount":1,"id":"009a1f293253e41e","secret":"[\"P2PK\",{\"nonce\":\"7b99e03aeeef568244585c8a4c9cdb855fafdf7809db929e69015a42b142e08b\",\"data\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\"}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","witness":"{\"signatures\":[\"9a2851824c39fc1743dd0a9ecf4469284798882ebbc783ae11c823daf936a2ba04d63006865fd62c96a7d323a8161828cd606797a3fed47d624453a56be548bf\"]}"}"#;
 
-        let valid_proof: Proof = serde_json::from_str(valid_proof).unwrap();
+        let mut valid_proof: Proof = serde_json::from_str(valid_proof).unwrap();
+        valid_proof.sign_p2pk(secret_key).unwrap();
+
+        println!("{}", serde_json::to_string(&valid_proof).unwrap());
 
         assert!(valid_proof.verify_p2pk().is_ok());
 
         // Proof with a signature that is in a different secret
-        let invalid_proof = r#"{"amount":1,"secret":"[\"P2PK\",{\"nonce\":\"859d4935c4907062a6297cf4e663e2835d90d97ecdd510745d32f6816323a41f\",\"data\":\"0249098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\",\"tags\":[[\"sigflag\",\"SIG_INPUTS\"]]}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","id":"009a1f293253e41e","witness":"{\"signatures\":[\"3426df9730d365a9d18d79bed2f3e78e9172d7107c55306ac5ddd1b2d065893366cfa24ff3c874ebf1fc22360ba5888ddf6ff5dbcb9e5f2f5a1368f7afc64f15\"]}"}"#;
+        let invalid_proof = r#"{"amount":1,"secret":"[\"P2PK\",{\"nonce\":\"859d4935c4907062a6297cf4e663e2835d90d97ecdd510745d32f6816323a41f\",\"data\":\"49098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\"}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","id":"009a1f293253e41e","witness":"{\"signatures\":[\"3426df9730d365a9d18d79bed2f3e78e9172d7107c55306ac5ddd1b2d065893366cfa24ff3c874ebf1fc22360ba5888ddf6ff5dbcb9e5f2f5a1368f7afc64f15\"]}"}"#;
 
         let invalid_proof: Proof = serde_json::from_str(invalid_proof).unwrap();
 
@@ -777,14 +797,14 @@ mod tests {
     #[test]
     fn verify_multi_sig() {
         // Proof with 2 valid signatures to satifiy the condition
-        let valid_proof = r#"{"amount":0,"secret":"[\"P2PK\",{\"nonce\":\"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1\",\"data\":\"0249098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\",\"tags\":[[\"pubkeys\",\"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"02142715675faf8da1ecc4d51e0b9e539fa0d52fdd96ed60dbe99adb15d6b05ad9\"],[\"n_sigs\",\"2\"],[\"sigflag\",\"SIG_INPUTS\"]]}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","id":"009a1f293253e41e","witness":"{\"signatures\":[\"83564aca48c668f50d022a426ce0ed19d3a9bdcffeeaee0dc1e7ea7e98e9eff1840fcc821724f623468c94f72a8b0a7280fa9ef5a54a1b130ef3055217f467b3\",\"9a72ca2d4d5075be5b511ee48dbc5e45f259bcf4a4e8bf18587f433098a9cd61ff9737dc6e8022de57c76560214c4568377792d4c2c6432886cc7050487a1f22\"]}"}"#;
+        let valid_proof = r#"{"amount":1,"id":"009a1f293253e41e","secret":"[\"P2PK\",{\"nonce\":\"f809a1f89ecb15846c6366caa56dbb409ddaf7517b1737374331c2ddaa4638bb\",\"data\":\"49098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\",\"tags\":[[\"pubkeys\",\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"142715675faf8da1ecc4d51e0b9e539fa0d52fdd96ed60dbe99adb15d6b05ad9\"],[\"n_sigs\",\"2\"]]}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","witness":"{\"signatures\":[\"163f276d92b98cfa3cc2fce66d3e6df50f11318433a7006af613ab7f044f5c96bb536e4d6bcb83511c1163c7762a699283247017568de9062164170faddfc12a\",\"53f7a6362d3f42897b0bc288d0b1b8499569d29f10def2fb5dc0ce030194db4b742999920adad4e7eb802f0a2311707f330a622c4227828018fde75fc8cc7819\"]}"}"#;
 
         let valid_proof: Proof = serde_json::from_str(valid_proof).unwrap();
 
         assert!(valid_proof.verify_p2pk().is_ok());
 
         // Proof with onlt one of the required signatures
-        let invalid_proof = r#"{"amount":0,"secret":"[\"P2PK\",{\"nonce\":\"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1\",\"data\":\"0249098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\",\"tags\":[[\"pubkeys\",\"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"02142715675faf8da1ecc4d51e0b9e539fa0d52fdd96ed60dbe99adb15d6b05ad9\"],[\"n_sigs\",\"2\"],[\"sigflag\",\"SIG_INPUTS\"]]}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","id":"009a1f293253e41e","witness":"{\"signatures\":[\"83564aca48c668f50d022a426ce0ed19d3a9bdcffeeaee0dc1e7ea7e98e9eff1840fcc821724f623468c94f72a8b0a7280fa9ef5a54a1b130ef3055217f467b3\"]}"}"#;
+        let invalid_proof = r#"{"amount":1,"id":"009a1f293253e41e","secret":"[\"P2PK\",{\"nonce\":\"f809a1f89ecb15846c6366caa56dbb409ddaf7517b1737374331c2ddaa4638bb\",\"data\":\"49098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\",\"tags\":[[\"pubkeys\",\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"142715675faf8da1ecc4d51e0b9e539fa0d52fdd96ed60dbe99adb15d6b05ad9\"],[\"n_sigs\",\"2\"]]}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","witness":"{\"signatures\":[\"163f276d92b98cfa3cc2fce66d3e6df50f11318433a7006af613ab7f044f5c96bb536e4d6bcb83511c1163c7762a699283247017568de9062164170faddfc12a\"]}"}"#;
 
         let invalid_proof: Proof = serde_json::from_str(invalid_proof).unwrap();
 
@@ -794,12 +814,12 @@ mod tests {
 
     #[test]
     fn verify_refund() {
-        let valid_proof = r#"{"amount":0,"secret":"[\"P2PK\",{\"nonce\":\"3eff971bb1ca70b16be3446a4d3feedf2f37f054c5c8621d832744df71b028f0\",\"data\":\"0249098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\",\"tags\":[[\"pubkeys\",\"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"02142715675faf8da1ecc4d51e0b9e539fa0d52fdd96ed60dbe99adb15d6b05ad9\"],[\"locktime\",\"21\"],[\"n_sigs\",\"2\"],[\"refund\",\"49098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\"],[\"sigflag\",\"SIG_INPUTS\"]]}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","id":"009a1f293253e41e","witness":"{\"signatures\":[\"94c6355461ca88e5d22c4e65e920b2e8253ccb4dd084675453a7bba7044e580246bd05e2520691afeccb2a88784cc56064353aec8b6a61e172727ba9cb3054a1\"]}"}"#;
+        let valid_proof = r#"{"amount":1,"id":"009a1f293253e41e","secret":"[\"P2PK\",{\"nonce\":\"e54f03d9805de0ddc1bc75c65fac9f7c3cc605d372b898bee7f23c90ede09d75\",\"data\":\"49098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\",\"tags\":[[\"pubkeys\",\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"142715675faf8da1ecc4d51e0b9e539fa0d52fdd96ed60dbe99adb15d6b05ad9\"],[\"locktime\",\"21\"],[\"n_sigs\",\"2\"],[\"refund\",\"49098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\"]]}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","witness":"{\"signatures\":[\"7ac6d7f02de854e5592b407d9f3ff4bc3521c698841faa0f78f8944398cf3cd223b9ca83cc03da807717a317a11774278a505aa95b8e24f48f06152c044c19a8\"]}"}"#;
 
         let valid_proof: Proof = serde_json::from_str(valid_proof).unwrap();
         assert!(valid_proof.verify_p2pk().is_ok());
 
-        let invalid_proof = r#"{"amount":0,"secret":"[\"P2PK\",{\"nonce\":\"d14cf9be9d9438d548b6b9d29bf800611136d053421b0f48c38d1447a7a92fc8\",\"data\":\"0249098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\",\"tags\":[[\"pubkeys\",\"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"02142715675faf8da1ecc4d51e0b9e539fa0d52fdd96ed60dbe99adb15d6b05ad9\"],[\"locktime\",\"2100000000000\"],[\"n_sigs\",\"2\"],[\"refund\",\"49098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\"],[\"sigflag\",\"SIG_INPUTS\"]]}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","id":"009a1f293253e41e","witness":"{\"signatures\":[\"c3079dccf828e9d38bbbb17edf19c7915ee11920cf271c36b8780fdeb88b16fbfbe0328c7dcbe80e56cdc8f85c5831c79df77b27e81e5630a4dd392601fab9eb\"]}"}"#;
+        let invalid_proof = r#"{"amount":1,"id":"009a1f293253e41e","secret":"[\"P2PK\",{\"nonce\":\"1318018406468abcb35d7be69eea84e8625172fe470efbd76d4cc374bd1fe027\",\"data\":\"49098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\",\"tags\":[[\"pubkeys\",\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"142715675faf8da1ecc4d51e0b9e539fa0d52fdd96ed60dbe99adb15d6b05ad9\"],[\"locktime\",\"2100000000000\"],[\"n_sigs\",\"2\"],[\"refund\",\"49098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7\"]]}]","C":"02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904","witness":"{\"signatures\":[\"e78bbd50240049e2dc6191812ed6a9989e8c997722443e1c1b8ab60ab9202b7a41b34b15298a52ba58ae67f1475ffcb6485a807c384474979fc86db90531c670\"]}"}"#;
 
         let invalid_proof: Proof = serde_json::from_str(invalid_proof).unwrap();
 
