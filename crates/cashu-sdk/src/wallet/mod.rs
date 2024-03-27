@@ -50,6 +50,10 @@ pub enum Error {
     LocalStore(#[from] localstore::Error),
     #[error("`{0}`")]
     Cashu(#[from] cashu::error::Error),
+    #[error("Could not verify Dleq")]
+    CouldNotVerifyDleq,
+    #[error("Unknown Key")]
+    UnknownKey,
     #[error("`{0}`")]
     Custom(String),
 }
@@ -338,6 +342,20 @@ impl<C: Client, L: LocalStore> Wallet<C, L> {
 
         let keys = self.get_keyset_keys(&mint_url, active_keyset_id).await?;
 
+        // Verify the signature DLEQ is valid
+        #[cfg(feature = "nut12")]
+        {
+            for (sig, premint) in mint_res.signatures.iter().zip(&premint_secrets.secrets) {
+                let keys = self.get_keyset_keys(&mint_url, sig.keyset_id).await?;
+                let key = keys.amount_key(sig.amount).ok_or(Error::UnknownKey)?;
+                match sig.verify_dleq(&key, &premint.blinded_message.b) {
+                    Ok(_) => (),
+                    Err(cashu::nuts::nut12::Error::MissingDleqProof) => (),
+                    Err(_) => return Err(Error::CouldNotVerifyDleq),
+                }
+            }
+        }
+
         let proofs = construct_proofs(
             mint_res.signatures,
             premint_secrets.rs(),
@@ -368,6 +386,26 @@ impl<C: Client, L: LocalStore> Wallet<C, L> {
         let token_data = Token::from_str(encoded_token)?;
 
         let unit = token_data.unit.unwrap_or_default();
+
+        // Verify the signature DLEQ is valid
+        // Verify that all proofs in the token have a vlid DLEQ proof if one is supplied
+        #[cfg(feature = "nut12")]
+        {
+            for mint_proof in &token_data.token {
+                let mint_url = &mint_proof.mint;
+                let proofs = &mint_proof.proofs;
+
+                for proof in proofs {
+                    let keys = self.get_keyset_keys(mint_url, proof.keyset_id).await?;
+                    let key = keys.amount_key(proof.amount).ok_or(Error::UnknownKey)?;
+                    match proof.verify_dleq(&key) {
+                        Ok(_) => continue,
+                        Err(cashu::nuts::nut12::Error::MissingDleqProof) => continue,
+                        Err(_) => return Err(Error::CouldNotVerifyDleq),
+                    }
+                }
+            }
+        }
 
         let mut proofs: HashMap<UncheckedUrl, Proofs> = HashMap::new();
         for token in token_data.token {
@@ -501,6 +539,22 @@ impl<C: Client, L: LocalStore> Wallet<C, L> {
         let mut proof_count: HashMap<Id, u64> = HashMap::new();
 
         for (promise, premint) in promises.iter().zip(blinded_messages) {
+            // Verify the signature DLEQ is valid
+            #[cfg(feature = "nut12")]
+            {
+                let keys = self
+                    .localstore
+                    .get_keys(&promise.keyset_id)
+                    .await?
+                    .ok_or(Error::UnknownKey)?;
+                let key = keys.amount_key(promise.amount).ok_or(Error::UnknownKey)?;
+                match promise.verify_dleq(&key, &premint.blinded_message.b) {
+                    Ok(_) => (),
+                    Err(cashu::nuts::nut12::Error::MissingDleqProof) => (),
+                    Err(_) => return Err(Error::CouldNotVerifyDleq),
+                }
+            }
+
             let a = self
                 .localstore
                 .get_keys(&promise.keyset_id)
@@ -900,6 +954,14 @@ impl<C: Client, L: LocalStore> Wallet<C, L> {
             let mut sig_flag = None;
 
             for proof in &mut proofs {
+                // Verify that proof DLEQ is valid
+                #[cfg(feature = "nut12")]
+                {
+                    let keys = self.localstore.get_keys(&proof.keyset_id).await?.unwrap();
+                    let key = keys.amount_key(proof.amount).unwrap();
+                    proof.verify_dleq(&key).unwrap();
+                }
+
                 if let Ok(secret) =
                     <cashu::secret::Secret as TryInto<cashu::nuts::nut10::Secret>>::try_into(
                         proof.secret.clone(),

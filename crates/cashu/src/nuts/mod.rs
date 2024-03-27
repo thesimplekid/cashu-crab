@@ -15,6 +15,8 @@ pub mod nut09;
 pub mod nut10;
 #[cfg(feature = "nut11")]
 pub mod nut11;
+#[cfg(feature = "nut12")]
+pub mod nut12;
 #[cfg(feature = "nut13")]
 pub mod nut13;
 
@@ -45,5 +47,7 @@ pub use nut09::{RestoreRequest, RestoreResponse};
 pub use nut10::{Kind, Secret as Nut10Secret, SecretData};
 #[cfg(feature = "nut11")]
 pub use nut11::{P2PKConditions, SigFlag, Signatures, SigningKey, VerifyingKey};
+#[cfg(feature = "nut12")]
+pub use nut12::{BlindSignatureDleq, ProofDleq};
 
 pub type Proofs = Vec<Proof>;

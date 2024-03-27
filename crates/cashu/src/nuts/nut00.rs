@@ -7,6 +7,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "nut12")]
+use super::{BlindSignatureDleq, ProofDleq};
 use super::{Id, Proofs, PublicKey};
 use crate::error::Error;
 #[cfg(feature = "nut11")]
@@ -25,7 +27,7 @@ pub struct BlindedMessage {
     /// Keyset Id
     #[serde(rename = "id")]
     pub keyset_id: Id,
-    /// encrypted secret message (B_)
+    /// Blinded secret message (B_)
     #[serde(rename = "B_")]
     pub b: PublicKey,
     /// Witness
@@ -420,6 +422,9 @@ pub struct BlindedSignature {
     /// blinded signature (C_) on the secret message `B_` of [BlindedMessage]
     #[serde(rename = "C_")]
     pub c: PublicKey,
+    /// DLEQ Proof
+    #[cfg(feature = "nut12")]
+    pub dleq: Option<BlindSignatureDleq>,
 }
 
 /// Proofs [NUT-00]
@@ -443,6 +448,9 @@ pub struct Proof {
     #[serde(serialize_with = "witness_serialize")]
     #[serde(deserialize_with = "witness_deserialize")]
     pub witness: Option<Signatures>,
+    /// DLEQ Proof
+    #[cfg(feature = "nut12")]
+    pub dleq: Option<ProofDleq>,
 }
 
 impl Proof {
@@ -454,6 +462,8 @@ impl Proof {
             c,
             #[cfg(feature = "nut11")]
             witness: None,
+            #[cfg(feature = "nut12")]
+            dleq: None,
         }
     }
 }

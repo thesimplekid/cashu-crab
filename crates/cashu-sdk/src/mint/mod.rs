@@ -57,6 +57,8 @@ pub enum Error {
     Localstore(#[from] localstore::Error),
     #[error("`{0}`")]
     Secret(#[from] cashu::secret::Error),
+    #[error("`{0}`")]
+    Nut12(#[from] cashu::nuts::nut12::Error),
     #[error("Unknown quote")]
     UnknownQuote,
     #[error("Unknown secret kind")]
@@ -358,11 +360,28 @@ impl Mint {
 
         let c = sign_message(key_pair.secret_key.clone().into(), b.clone().into())?;
 
-        Ok(BlindedSignature {
-            amount: *amount,
-            c: c.into(),
-            keyset_id: keyset.id,
-        })
+        let blinded_signature;
+        #[cfg(not(feature = "nut12"))]
+        {
+            blinded_signature = BlindedSignature {
+                amount: *amount,
+                c: c.into(),
+                keyset_id: keyset.id,
+            };
+        }
+
+        #[cfg(feature = "nut12")]
+        {
+            blinded_signature = BlindedSignature::new_dleq(
+                *amount,
+                c.into(),
+                keyset.id,
+                &blinded_message.b,
+                key_pair.secret_key.clone(),
+            )?;
+        }
+
+        Ok(blinded_signature)
     }
 
     pub async fn process_swap_request(

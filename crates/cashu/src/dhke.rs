@@ -1,6 +1,7 @@
 //! Diffie-Hellmann key exchange
 
 use bitcoin::hashes::{sha256, Hash};
+use k256::elliptic_curve::sec1::ToEncodedPoint;
 #[cfg(feature = "mint")]
 pub use mint::{sign_message, verify_message};
 #[cfg(feature = "wallet")]
@@ -37,6 +38,18 @@ pub fn hash_to_curve(message: &[u8]) -> Result<k256::PublicKey, Error> {
     }
 
     Err(Error::NoValidPoint)
+}
+
+pub fn hash_e(pubkeys: Vec<k256::PublicKey>) -> Vec<u8> {
+    let mut e = "".to_string();
+
+    for pubkey in pubkeys {
+        let uncompressed_point = pubkey.to_encoded_point(false).to_bytes();
+
+        e.push_str(&hex::encode(uncompressed_point));
+    }
+
+    sha256::Hash::hash(e.as_bytes()).to_byte_array().to_vec()
 }
 
 #[cfg(feature = "wallet")]
@@ -102,14 +115,44 @@ mod wallet {
                 ))?
                 .to_owned();
 
-            let unblinded_signature = unblind_message(blinded_c, r.into(), a)?;
+            let unblinded_signature = unblind_message(blinded_c, r.clone().into(), a)?;
 
-            let proof = Proof::new(
-                blinded_signature.amount,
-                blinded_signature.keyset_id,
-                secret,
-                unblinded_signature,
-            );
+            let proof;
+
+            #[cfg(not(feature = "nut12"))]
+            {
+                proof = Proof {
+                    amount: blinded_signature.amount,
+                    keyset_id: blinded_signature.keyset_id,
+                    secret,
+                    c: unblinded_signature,
+                    #[cfg(feature = "nut11")]
+                    witness: None,
+                };
+            }
+
+            #[cfg(feature = "nut12")]
+            {
+                let dleq = if let Some(dleq) = blinded_signature.dleq {
+                    Some(ProofDleq {
+                        e: dleq.e,
+                        s: dleq.s,
+                        r,
+                    })
+                } else {
+                    None
+                };
+
+                proof = Proof {
+                    amount: blinded_signature.amount,
+                    keyset_id: blinded_signature.keyset_id,
+                    secret,
+                    c: unblinded_signature,
+                    #[cfg(feature = "nut11")]
+                    witness: None,
+                    dleq,
+                };
+            }
 
             proofs.push(proof);
         }
@@ -163,55 +206,90 @@ mod mint {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use hex::decode;
     use k256::elliptic_curve::scalar::ScalarPrimitive;
 
     use super::*;
+    use crate::nuts::PublicKey;
+
+    #[test]
+    fn test_hash_to_curve() {
+        let secret = "0000000000000000000000000000000000000000000000000000000000000000";
+        let sec_hex = decode(secret).unwrap();
+
+        let y = hash_to_curve(&sec_hex).unwrap();
+        let expected_y = k256::PublicKey::from_sec1_bytes(
+            &hex::decode("024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725")
+                .unwrap(),
+        )
+        .unwrap();
+        println!("{}", hex::encode(y.to_sec1_bytes()));
+        assert_eq!(y, expected_y);
+
+        let secret = "0000000000000000000000000000000000000000000000000000000000000001";
+        let sec_hex = decode(secret).unwrap();
+        let y = hash_to_curve(&sec_hex).unwrap();
+        let expected_y = k256::PublicKey::from_sec1_bytes(
+            &hex::decode("022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf")
+                .unwrap(),
+        )
+        .unwrap();
+        println!("{}", hex::encode(y.to_sec1_bytes()));
+        assert_eq!(y, expected_y);
+        // Note that this message will take a few iterations of the loop before finding
+        // a valid point
+        let secret = "0000000000000000000000000000000000000000000000000000000000000002";
+        let sec_hex = decode(secret).unwrap();
+        let y = hash_to_curve(&sec_hex).unwrap();
+        let expected_y = k256::PublicKey::from_sec1_bytes(
+            &hex::decode("026cdbe15362df59cd1dd3c9c11de8aedac2106eca69236ecd9fbe117af897be4f")
+                .unwrap(),
+        )
+        .unwrap();
+        println!("{}", hex::encode(y.to_sec1_bytes()));
+        assert_eq!(y, expected_y);
+    }
+
+    #[test]
+    fn test_hash_e() {
+        let c = PublicKey::from_str(
+            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2",
+        )
+        .unwrap();
+
+        let k = PublicKey::from_str(
+            "020000000000000000000000000000000000000000000000000000000000000001",
+        )
+        .unwrap();
+
+        let r1 = PublicKey::from_str(
+            "020000000000000000000000000000000000000000000000000000000000000001",
+        )
+        .unwrap();
+
+        let r2 = PublicKey::from_str(
+            "020000000000000000000000000000000000000000000000000000000000000001",
+        )
+        .unwrap();
+
+        let e = hash_e(vec![r1.into(), r2.into(), k.into(), c.into()]);
+        let e_hex = hex::encode(e);
+
+        assert_eq!(
+            "a4dc034b74338c28c6bc3ea49731f2a24440fc7c4affc08b31a93fc9fbe6401e",
+            e_hex
+        )
+    }
 
     #[cfg(feature = "wallet")]
     mod wallet_tests {
+
         use k256::SecretKey;
 
         use super::*;
         use crate::nuts::PublicKey;
-
-        #[test]
-        fn test_hash_to_curve() {
-            let secret = "0000000000000000000000000000000000000000000000000000000000000000";
-            let sec_hex = decode(secret).unwrap();
-
-            let y = hash_to_curve(&sec_hex).unwrap();
-            let expected_y = k256::PublicKey::from_sec1_bytes(
-                &hex::decode("024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725")
-                    .unwrap(),
-            )
-            .unwrap();
-            println!("{}", hex::encode(y.to_sec1_bytes()));
-            assert_eq!(y, expected_y);
-
-            let secret = "0000000000000000000000000000000000000000000000000000000000000001";
-            let sec_hex = decode(secret).unwrap();
-            let y = hash_to_curve(&sec_hex).unwrap();
-            let expected_y = k256::PublicKey::from_sec1_bytes(
-                &hex::decode("022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf")
-                    .unwrap(),
-            )
-            .unwrap();
-            println!("{}", hex::encode(y.to_sec1_bytes()));
-            assert_eq!(y, expected_y);
-            // Note that this message will take a few iterations of the loop before finding
-            // a valid point
-            let secret = "0000000000000000000000000000000000000000000000000000000000000002";
-            let sec_hex = decode(secret).unwrap();
-            let y = hash_to_curve(&sec_hex).unwrap();
-            let expected_y = k256::PublicKey::from_sec1_bytes(
-                &hex::decode("026cdbe15362df59cd1dd3c9c11de8aedac2106eca69236ecd9fbe117af897be4f")
-                    .unwrap(),
-            )
-            .unwrap();
-            println!("{}", hex::encode(y.to_sec1_bytes()));
-            assert_eq!(y, expected_y);
-        }
 
         #[test]
         fn test_blind_message() {
@@ -313,7 +391,6 @@ mod tests {
             let sec = SecretKey::new(ScalarPrimitive::ONE);
 
             let (blinded_message, _r) = blind_message(message.as_bytes(), Some(sec)).unwrap();
-
             // A
             let bob_sec = SecretKey::new(ScalarPrimitive::ONE);
 

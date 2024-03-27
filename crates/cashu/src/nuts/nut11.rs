@@ -758,6 +758,8 @@ mod tests {
             )
             .unwrap(),
             witness: Some(Signatures { signatures: vec![] }),
+            #[cfg(feature = "nut12")]
+            dleq: None,
         };
 
         proof.sign_p2pk(secret_key).unwrap();
