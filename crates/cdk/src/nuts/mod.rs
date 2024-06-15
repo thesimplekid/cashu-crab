@@ -14,6 +14,8 @@ pub mod nut12;
 pub mod nut13;
 pub mod nut14;
 pub mod nut15;
+pub mod nut17;
+pub mod nut18;
 
 pub use nut00::{
     BlindSignature, BlindedMessage, CurrencyUnit, MintProofs, PaymentMethod, PreMint,
