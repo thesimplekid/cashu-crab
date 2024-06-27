@@ -282,6 +282,7 @@ impl<'de> Deserialize<'de> for CurrencyUnit {
 pub enum PaymentMethod {
     #[default]
     Bolt11,
+    BtcOnChain,
     Custom(String),
 }
 
@@ -292,6 +293,7 @@ where
     fn from(method: S) -> Self {
         match method.as_ref() {
             "bolt11" => Self::Bolt11,
+            "btconchain" => Self::BtcOnChain,
             o => Self::Custom(o.to_string()),
         }
     }
@@ -301,6 +303,7 @@ impl fmt::Display for PaymentMethod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PaymentMethod::Bolt11 => write!(f, "bolt11"),
+            PaymentMethod::BtcOnChain => write!(f, "btconchain"),
             PaymentMethod::Custom(unit) => write!(f, "{}", unit),
         }
     }
