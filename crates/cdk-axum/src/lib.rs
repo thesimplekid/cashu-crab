@@ -19,7 +19,6 @@ use cdk::nuts::{
 };
 use cdk::util::unix_time;
 use cdk::{Amount, Bolt11Invoice};
-use futures::StreamExt;
 
 const MSATS_IN_SAT: u64 = 1000;
 
@@ -28,22 +27,6 @@ pub async fn create_mint_router(
     mint: Arc<Mint>,
     ln: Arc<dyn MintLightning<Err = cdk_lightning::Error> + Send + Sync>,
 ) -> Result<Router> {
-    let mint_clone = Arc::clone(&mint);
-    let ln_clone = ln.clone();
-    tokio::spawn(async move {
-        loop {
-            let mut stream = ln_clone.wait_any_invoice().await.unwrap();
-
-            while let Some(invoice) = stream.next().await {
-                if let Err(err) =
-                    handle_paid_invoice(mint_clone.clone(), &invoice.to_string()).await
-                {
-                    tracing::warn!("{:?}", err);
-                }
-            }
-        }
-    });
-
     let state = MintState {
         ln,
         mint,
@@ -75,15 +58,6 @@ pub async fn create_mint_router(
     Ok(mint_router)
 }
 
-async fn handle_paid_invoice(mint: Arc<Mint>, request: &str) -> Result<()> {
-    if let Some(quote) = mint.localstore.get_mint_quote_by_request(request).await? {
-        mint.localstore
-            .update_mint_quote_state(&quote.id, MintQuoteState::Paid)
-            .await?;
-    }
-
-    Ok(())
-}
 #[derive(Clone)]
 struct MintState {
     ln: Arc<dyn MintLightning<Err = cdk_lightning::Error> + Send + Sync>,

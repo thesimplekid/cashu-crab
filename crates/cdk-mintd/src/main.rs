@@ -124,7 +124,8 @@ async fn main() -> anyhow::Result<()> {
     let listen_addr = settings.info.listen_host;
     let listen_port = settings.info.listen_port;
 
-    let v1_service = cdk_axum::create_mint_router(&mint_url, mint, ln).await?;
+    let v1_service =
+        cdk_axum::create_mint_router(&mint_url, Arc::clone(&mint), Arc::clone(&ln)).await?;
 
     let mint_service = Router::new()
         .nest("/", v1_service)
@@ -135,6 +136,22 @@ async fn main() -> anyhow::Result<()> {
             ACCESS_CONTROL_ALLOW_ORIGIN,
         ]))
         .route("/hello", get(StatusCode::OK));
+
+    let mint_clone = Arc::clone(&mint);
+    let ln_clone = ln.clone();
+    tokio::spawn(async move {
+        loop {
+            let mut stream = ln_clone.wait_any_invoice().await.unwrap();
+
+            while let Some(invoice) = stream.next().await {
+                if let Err(err) =
+                    handle_paid_invoice(mint_clone.clone(), &invoice.to_string()).await
+                {
+                    tracing::warn!("{:?}", err);
+                }
+            }
+        }
+    });
 
     let listener =
         tokio::net::TcpListener::bind(format!("{}:{}", listen_addr, listen_port)).await?;
