@@ -57,26 +57,29 @@ pub async fn start_server(
         mint_url: mint_url.to_string(),
     };
 
-    let mint_service = Router::new()
-        .route("/v1/keys", get(get_keys))
-        .route("/v1/keysets", get(get_keysets))
-        .route("/v1/keys/:keyset_id", get(get_keyset_pubkeys))
-        .route("/v1/swap", post(post_swap))
-        .route("/v1/mint/quote/bolt11", post(get_mint_bolt11_quote))
+    let mint_v1_routes = Router::new()
+        .route("/keys", get(get_keys))
+        .route("/keysets", get(get_keysets))
+        .route("/keys/:keyset_id", get(get_keyset_pubkeys))
+        .route("/swap", post(post_swap))
+        .route("/mint/quote/bolt11", post(get_mint_bolt11_quote))
         .route(
-            "/v1/mint/quote/bolt11/:quote_id",
+            "/mint/quote/bolt11/:quote_id",
             get(get_check_mint_bolt11_quote),
         )
-        .route("/v1/mint/bolt11", post(post_mint_bolt11))
-        .route("/v1/melt/quote/bolt11", post(get_melt_bolt11_quote))
+        .route("/mint/bolt11", post(post_mint_bolt11))
+        .route("/melt/quote/bolt11", post(get_melt_bolt11_quote))
         .route(
-            "/v1/melt/quote/bolt11/:quote_id",
+            "/melt/quote/bolt11/:quote_id",
             get(get_check_melt_bolt11_quote),
         )
-        .route("/v1/melt/bolt11", post(post_melt_bolt11))
-        .route("/v1/checkstate", post(post_check))
-        .route("/v1/info", get(get_mint_info))
-        .route("/v1/restore", post(post_restore))
+        .route("/melt/bolt11", post(post_melt_bolt11))
+        .route("/checkstate", post(post_check))
+        .route("/info", get(get_mint_info))
+        .route("/restore", post(post_restore));
+
+    let mint_service = Router::new()
+        .nest("/v1", mint_v1_routes)
         .layer(CorsLayer::very_permissive().allow_headers([
             AUTHORIZATION,
             CONTENT_TYPE,
