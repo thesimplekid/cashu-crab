@@ -41,6 +41,7 @@ futures = { version = "0.3.28", default-feature = false }
 web-sys =  { version = "0.3.69", default-features = false, features = ["console"] }
 uuid = { version = "1", features = ["v4"] }
 lightning-invoice = { version = "0.31", features = ["serde"] }
+home = "0.5.9"
 
 [profile]
 

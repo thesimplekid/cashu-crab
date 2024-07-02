@@ -19,7 +19,6 @@ cdk-cln = { workspace = true, default-features = false }
 cdk-axum = { workspace = true, default-features = false }
 config = { version = "0.13.3", features = ["toml"] }
 clap = { version = "4.4.8", features = ["derive", "env", "default"] }
-dirs = "5.0.1"
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber = "0.3.18"
@@ -28,3 +27,4 @@ serde.workspace = true
 bip39.workspace = true
 tower-http = { version = "0.5.2", features = ["cors"] }
 lightning-invoice.workspace = true
+home.workspace = true

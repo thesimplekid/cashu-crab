@@ -82,7 +82,7 @@ pub struct Settings {
 
 impl Settings {
     #[must_use]
-    pub fn new(config_file_name: &Option<String>) -> Self {
+    pub fn new(config_file_name: &Option<PathBuf>) -> Self {
         let default_settings = Self::default();
         // attempt to construct settings with file
         let from_file = Self::new_from_default(&default_settings, config_file_name);
@@ -97,15 +97,15 @@ impl Settings {
 
     fn new_from_default(
         default: &Settings,
-        config_file_name: &Option<String>,
+        config_file_name: &Option<PathBuf>,
     ) -> Result<Self, ConfigError> {
-        let mut default_config_file_name = dirs::config_dir()
+        let mut default_config_file_name = home::home_dir()
             .ok_or(ConfigError::NotFound("Config Path".to_string()))?
             .join("cashu-rs-mint");
 
         default_config_file_name.push("config.toml");
         let config: String = match config_file_name {
-            Some(value) => value.clone(),
+            Some(value) => value.clone().to_string_lossy().to_string(),
             None => default_config_file_name.to_string_lossy().to_string(),
         };
         let builder = Config::builder();

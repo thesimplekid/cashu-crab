@@ -34,13 +34,13 @@ async fn main() -> anyhow::Result<()> {
     // get config file name from args
     let config_file_arg = match args.config {
         Some(c) => c,
-        None => "./config.toml".to_string(),
+        None => work_dir()?.join("config.toml"),
     };
 
     let settings = config::Settings::new(&Some(config_file_arg));
 
     let db_path = match args.db {
-        Some(path) => PathBuf::from_str(&path)?,
+        Some(path) => path,
         None => settings.info.clone().db_path,
     };
 
@@ -155,7 +155,7 @@ async fn check_pending_quotes(
 
 fn expand_path(path: &str) -> Option<PathBuf> {
     if path.starts_with('~') {
-        if let Some(home_dir) = dirs::home_dir().as_mut() {
+        if let Some(home_dir) = home::home_dir().as_mut() {
             let remainder = &path[2..];
             home_dir.push(remainder);
             let expanded_path = home_dir;
@@ -166,4 +166,10 @@ fn expand_path(path: &str) -> Option<PathBuf> {
     } else {
         Some(PathBuf::from(path))
     }
+}
+
+fn work_dir() -> Result<PathBuf> {
+    let home_dir = home::home_dir().ok_or(anyhow!("Unknown home dir"))?;
+
+    Ok(home_dir.join(".cdk-mintd"))
 }
