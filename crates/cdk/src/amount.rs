@@ -1,12 +1,12 @@
 //! CDK Amount
 //!
-//! Is any and will be treated as the unit of the wallet
+//! Is any unit and will be treated as the unit of the wallet
 
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// Number of satoshis
+/// Amount can be any unit
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Amount(u64);
@@ -66,18 +66,6 @@ impl Amount {
         parts.sort();
         parts
     }
-}
-
-/// Kinds of targeting that are supported
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize,
-)]
-pub enum SplitTarget {
-    /// Default target; least amount of proofs
-    #[default]
-    None,
-    /// Target amount for wallet to have most proofs that add up to value
-    Value(Amount),
 }
 
 impl Default for Amount {
@@ -171,6 +159,18 @@ impl core::iter::Sum for Amount {
         let sats: u64 = iter.map(|amt| amt.0).sum();
         Amount::from(sats)
     }
+}
+
+/// Kinds of targeting that are supported
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize,
+)]
+pub enum SplitTarget {
+    /// Default target; least amount of proofs
+    #[default]
+    None,
+    /// Target amount for wallet to have most proofs that add up to value
+    Value(Amount),
 }
 
 #[cfg(test)]

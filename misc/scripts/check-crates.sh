@@ -32,6 +32,7 @@ buildargs=(
     "-p cdk-redb --no-default-features --features mint"
     "-p cdk-sqlite --no-default-features --features mint"
     "-p cdk-sqlite --no-default-features --features wallet"
+    "-p cdk-cln"
     "--bin cdk-cli"
     "--examples"
 )
