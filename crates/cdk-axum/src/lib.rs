@@ -3,9 +3,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use axum::extract::{Json, Path, State};
-use axum::http::header::{
-    ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE,
-};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -20,21 +17,17 @@ use cdk::nuts::{
     MintBolt11Response, MintInfo, MintQuoteBolt11Request, MintQuoteBolt11Response, MintQuoteState,
     RestoreRequest, RestoreResponse, SwapRequest, SwapResponse,
 };
-use cdk::types::MintQuote;
 use cdk::util::unix_time;
 use cdk::{Amount, Bolt11Invoice};
 use futures::StreamExt;
-use tower_http::cors::CorsLayer;
 
 const MSATS_IN_SAT: u64 = 1000;
 
-pub async fn start_server(
+pub async fn create_mint_router(
     mint_url: &str,
-    listen_addr: &str,
-    listen_port: u16,
     mint: Arc<Mint>,
     ln: Arc<dyn MintLightning<Err = cdk_lightning::Error> + Send + Sync>,
-) -> Result<()> {
+) -> Result<Router> {
     let mint_clone = Arc::clone(&mint);
     let ln_clone = ln.clone();
     tokio::spawn(async move {
@@ -57,7 +50,7 @@ pub async fn start_server(
         mint_url: mint_url.to_string(),
     };
 
-    let mint_v1_routes = Router::new()
+    let mint_router = Router::new()
         .route("/keys", get(get_keys))
         .route("/keysets", get(get_keysets))
         .route("/keys/:keyset_id", get(get_keyset_pubkeys))
@@ -76,35 +69,17 @@ pub async fn start_server(
         .route("/melt/bolt11", post(post_melt_bolt11))
         .route("/checkstate", post(post_check))
         .route("/info", get(get_mint_info))
-        .route("/restore", post(post_restore));
-
-    let mint_service = Router::new()
-        .nest("/v1", mint_v1_routes)
-        .layer(CorsLayer::very_permissive().allow_headers([
-            AUTHORIZATION,
-            CONTENT_TYPE,
-            ACCESS_CONTROL_ALLOW_CREDENTIALS,
-            ACCESS_CONTROL_ALLOW_ORIGIN,
-        ]))
+        .route("/restore", post(post_restore))
         .with_state(state);
 
-    let listener =
-        tokio::net::TcpListener::bind(format!("{}:{}", listen_addr, listen_port)).await?;
-
-    axum::serve(listener, mint_service).await?;
-
-    Ok(())
+    Ok(mint_router)
 }
 
 async fn handle_paid_invoice(mint: Arc<Mint>, request: &str) -> Result<()> {
-    let quotes: Vec<MintQuote> = mint.mint_quotes().await?;
-
-    for quote in quotes {
-        if quote.request.eq(request) {
-            mint.localstore
-                .update_mint_quote_state(&quote.id, MintQuoteState::Paid)
-                .await?;
-        }
+    if let Some(quote) = mint.localstore.get_mint_quote_by_request(request).await? {
+        mint.localstore
+            .update_mint_quote_state(&quote.id, MintQuoteState::Paid)
+            .await?;
     }
 
     Ok(())

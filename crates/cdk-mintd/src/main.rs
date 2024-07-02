@@ -5,6 +5,12 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
+use axum::http::header::{
+    ACCESS_CONTROL_ALLOW_CREDENTIALS, ACCESS_CONTROL_ALLOW_ORIGIN, AUTHORIZATION, CONTENT_TYPE,
+};
+use axum::http::StatusCode;
+use axum::routing::get;
+use axum::Router;
 use bip39::Mnemonic;
 use cdk::cdk_database::{self, MintDatabase};
 use cdk::cdk_lightning::MintLightning;
@@ -19,6 +25,7 @@ use cli::CLIArgs;
 use config::{DatabaseEngine, LnBackend};
 use futures::StreamExt;
 use lightning_invoice::Bolt11Invoice;
+use tower_http::cors::CorsLayer;
 
 mod cli;
 mod config;
@@ -117,7 +124,22 @@ async fn main() -> anyhow::Result<()> {
     let listen_addr = settings.info.listen_host;
     let listen_port = settings.info.listen_port;
 
-    cdk_axum::start_server(&mint_url, &listen_addr, listen_port, mint, ln).await?;
+    let v1_service = cdk_axum::create_mint_router(&mint_url, mint, ln).await?;
+
+    let mint_service = Router::new()
+        .nest("/", v1_service)
+        .layer(CorsLayer::very_permissive().allow_headers([
+            AUTHORIZATION,
+            CONTENT_TYPE,
+            ACCESS_CONTROL_ALLOW_CREDENTIALS,
+            ACCESS_CONTROL_ALLOW_ORIGIN,
+        ]))
+        .route("/hello", get(StatusCode::OK));
+
+    let listener =
+        tokio::net::TcpListener::bind(format!("{}:{}", listen_addr, listen_port)).await?;
+
+    axum::serve(listener, mint_service).await?;
 
     Ok(())
 }
