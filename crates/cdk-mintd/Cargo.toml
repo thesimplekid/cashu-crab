@@ -1,0 +1,30 @@
+[package]
+name = "cdk-mintd"
+version = "0.1.0"
+edition = "2021"
+authors = ["CDK Developers"]
+homepage.workspace = true
+repository.workspace = true
+rust-version.workspace = true # MSRV
+license.workspace = true
+
+[dependencies]
+anyhow = "1.0.75"
+axum = "0.7.5"
+axum-macros = "0.4.1"
+cdk = { workspace = true, default-features = false, features = ["mint"] }
+cdk-redb = { workspace = true, default-features = false, features = ["mint"] }
+cdk-sqlite = { workspace = true, default-features = false, features = ["mint"] }
+cdk-cln = { workspace = true, default-features = false }
+cdk-axum = { workspace = true, default-features = false }
+config = { version = "0.13.3", features = ["toml"] }
+clap = { version = "4.4.8", features = ["derive", "env", "default"] }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber = "0.3.18"
+futures = "0.3.28"
+serde.workspace = true
+bip39.workspace = true
+tower-http = { version = "0.5.2", features = ["cors"] }
+lightning-invoice.workspace = true
+home.workspace = true

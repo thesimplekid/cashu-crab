@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS mint_quote (
 
 CREATE INDEX IF NOT EXISTS paid_index ON mint_quote(paid);
 CREATE INDEX IF NOT EXISTS request_index ON mint_quote(request);
+CREATE INDEX IF NOT EXISTS expiry_index ON mint_quote(expiry);
 
 CREATE TABLE IF NOT EXISTS melt_quote (
     id TEXT PRIMARY KEY,
@@ -55,6 +56,7 @@ CREATE TABLE IF NOT EXISTS melt_quote (
 
 CREATE INDEX IF NOT EXISTS paid_index ON melt_quote(paid);
 CREATE INDEX IF NOT EXISTS request_index ON melt_quote(request);
+CREATE INDEX IF NOT EXISTS expiry_index ON melt_quote(expiry);
 
 CREATE TABLE IF NOT EXISTS blind_signature (
     y BLOB PRIMARY KEY,

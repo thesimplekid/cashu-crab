@@ -159,6 +159,16 @@ impl Mint {
         Ok(quotes)
     }
 
+    /// Get pending mint quotes
+    pub async fn get_pending_mint_quotes(&self) -> Result<Vec<MintQuote>, Error> {
+        let mint_quotes = self.localstore.get_mint_quotes().await?;
+
+        Ok(mint_quotes
+            .into_iter()
+            .filter(|p| p.state == MintQuoteState::Pending)
+            .collect())
+    }
+
     /// Remove mint quote
     pub async fn remove_mint_quote(&self, quote_id: &str) -> Result<(), Error> {
         self.localstore.remove_mint_quote(quote_id).await?;
@@ -704,7 +714,7 @@ impl Mint {
     pub async fn process_melt_request(
         &self,
         melt_request: &MeltBolt11Request,
-        preimage: &str,
+        payment_preimage: Option<String>,
         total_spent: Amount,
     ) -> Result<MeltQuoteBolt11Response, Error> {
         tracing::debug!("Processing melt quote: {}", melt_request.quote);
@@ -788,7 +798,7 @@ impl Mint {
         Ok(MeltQuoteBolt11Response {
             amount: quote.amount,
             paid: Some(true),
-            payment_preimage: Some(preimage.to_string()),
+            payment_preimage,
             change,
             quote: quote.id,
             fee_reserve: quote.fee_reserve,

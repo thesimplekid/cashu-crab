@@ -175,6 +175,11 @@ pub trait MintDatabase {
         state: MintQuoteState,
     ) -> Result<MintQuoteState, Self::Err>;
     /// Get all [`MintQuote`]s
+    async fn get_mint_quote_by_request(
+        &self,
+        request: &str,
+    ) -> Result<Option<MintQuote>, Self::Err>;
+    /// Get Mint Quotes
     async fn get_mint_quotes(&self) -> Result<Vec<MintQuote>, Self::Err>;
     /// Remove [`MintQuote`]
     async fn remove_mint_quote(&self, quote_id: &str) -> Result<(), Self::Err>;

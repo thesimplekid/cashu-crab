@@ -5,6 +5,8 @@
 
 pub mod amount;
 pub mod cdk_database;
+#[cfg(feature = "mint")]
+pub mod cdk_lightning;
 pub mod dhke;
 pub mod error;
 #[cfg(feature = "mint")]

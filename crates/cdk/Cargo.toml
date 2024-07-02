@@ -12,12 +12,13 @@ license.workspace = true
 
 [features]
 default = ["mint", "wallet"]
-mint = []
+mint = ["dep:futures"]
 wallet = ["dep:reqwest"]
 
 
 [dependencies]
 async-trait.workspace = true
+anyhow.workspace = true
 base64 = "0.22" # bitcoin uses v0.13 (optional dep)
 bitcoin = { workspace = true, features = [
     "serde",
@@ -26,7 +27,7 @@ bitcoin = { workspace = true, features = [
 ] } # lightning-invoice uses v0.30
 ciborium = { version = "0.2.2", default-features = false, features = ["std"] }
 http = "1.0"
-lightning-invoice = { version = "0.31", features = ["serde"] }
+lightning-invoice.workspace = true
 once_cell = "1.19"
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
@@ -38,8 +39,9 @@ serde_json.workspace = true
 serde_with = "3.4"
 tracing.workspace = true
 thiserror.workspace = true
+futures = { workspace = true, optional = true }
 url = "2.3"
-uuid = { version = "1", features = ["v4"] }
+uuid.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = [

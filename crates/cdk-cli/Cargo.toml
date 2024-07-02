@@ -24,7 +24,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber = "0.3.18"
 rand = "0.8.5"
-home = "0.5.9"
+home.workspace = true
 nostr-sdk = { version = "0.32.0", default-features = false, features = [
     "nip04",
     "nip44"
